@@ -4,53 +4,97 @@ package Algorithm
 import (
 	"container/heap"
 	"fmt"
+	"reflect"
 )
 
 // An Item is something we manage in a priority queue.
 type Item struct {
-	value    string // The value of the item; arbitrary.
-	priority int    // The priority of the item in the queue.
+	value    interface{} // The value of the item; arbitrary.
+	priority int         // The priority of the item in the queue.
 	// The index is needed by update and is maintained by the heap.Interface methods.
 	index int // The index of the item in the heap.
 }
 
-// A PriorityQueue implements heap.Interface and holds Items.
-type PriorityQueue []*Item
+// A queue implements heap.Interface and holds Items.
+type queue []*Item
 
-func (pq PriorityQueue) Len() int { return len(pq) }
+func (q queue) Len() int { return len(q) }
 
-func (pq PriorityQueue) Less(i, j int) bool {
+func (q queue) Less(i, j int) bool {
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
-	return pq[i].priority > pq[j].priority
+	return q[i].priority > q[j].priority
 }
 
-func (pq PriorityQueue) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-	pq[i].index = i
-	pq[j].index = j
+func (q queue) Swap(i, j int) {
+	q[i], q[j] = q[j], q[i]
+	q[i].index = i
+	q[j].index = j
 }
 
-func (pq *PriorityQueue) Push(x interface{}) {
-	n := len(*pq)
+func (q *queue) Push(x interface{}) {
+	n := len(*q)
 	item := x.(*Item)
 	item.index = n
-	*pq = append(*pq, item)
+	*q = append(*q, item)
 }
 
-func (pq *PriorityQueue) Pop() interface{} {
-	old := *pq
+func (q *queue) Pop() interface{} {
+	old := *q
 	n := len(old)
 	item := old[n-1]
 	item.index = -1 // for safety
-	*pq = old[0 : n-1]
+	*q = old[0 : n-1]
 	return item
 }
 
 // update modifies the priority and value of an Item in the queue.
-func (pq *PriorityQueue) update(item *Item, value string, priority int) {
+func (q *queue) update(item *Item, value interface{}, priority int) {
 	item.value = value
 	item.priority = priority
-	heap.Fix(pq, item.index)
+	heap.Fix(q, item.index)
+}
+
+type PriorityQueue struct {
+	q         queue
+	valueType reflect.Type
+}
+
+func NewPriorityQueue(valueType reflect.Type) *PriorityQueue {
+	return &PriorityQueue{q: make([]*Item, 0), valueType: valueType}
+}
+
+func (pq *PriorityQueue) Len() int {
+	return len(pq.q)
+}
+
+func (pq *PriorityQueue) isAccept(item *Item) bool {
+	if item == nil || reflect.TypeOf(item.value) != pq.valueType {
+		return false
+	}
+	return true
+}
+
+func (pq *PriorityQueue) Push(x *Item) {
+	if pq.isAccept(x) {
+		heap.Push(&pq.q, x)
+	}
+}
+
+func (pq *PriorityQueue) Pop() *Item {
+	if pq.Len() == 0 {
+		return nil
+	}
+	return heap.Pop(&pq.q).(*Item)
+}
+
+func (pq *PriorityQueue) Update(item *Item, value interface{}, priority int) {
+	if reflect.TypeOf(value) == pq.valueType {
+		pq.q.update(item, value, priority)
+	}
+}
+
+func (pq *PriorityQueue) ValueType() reflect.Type {
+	return pq.valueType
 }
 
 // This example creates a PriorityQueue with some items, adds and manipulates an item,
@@ -58,34 +102,32 @@ func (pq *PriorityQueue) update(item *Item, value string, priority int) {
 func main() {
 	// Some items and their priorities.
 	items := map[string]int{
-		"banana": 3, "apple": 2, "pear": 4,
+		"banana": 3, "apple": 2, "pear": 4, "apple1": 1,
 	}
 
 	// Create a priority queue, put the items in it, and
 	// establish the priority queue (heap) invariants.
-	pq := make(PriorityQueue, len(items))
+	pq := NewPriorityQueue(reflect.TypeOf(""))
 	i := 0
 	for value, priority := range items {
-		pq[i] = &Item{
+		pq.Push(&Item{
 			value:    value,
 			priority: priority,
 			index:    i,
-		}
+		})
 		i++
 	}
-	heap.Init(&pq)
-
 	// Insert a new item and then modify its priority.
 	item := &Item{
 		value:    "orange",
 		priority: 1,
 	}
-	heap.Push(&pq, item)
-	pq.update(item, item.value, 5)
+	pq.Push(item)
+	pq.Update(item, item.value, 5)
 
 	// Take the items out; they arrive in decreasing priority order.
 	for pq.Len() > 0 {
-		item := heap.Pop(&pq).(*Item)
+		item := pq.Pop()
 		fmt.Printf("%.2d:%s ", item.priority, item.value)
 	}
 }
